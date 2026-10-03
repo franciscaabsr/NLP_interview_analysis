@@ -21,6 +21,7 @@
 #                   -m DIR   MOSAIC DATA folder (MOSAIC/DATA)  (default: ./DATA)
 #                   -o DIR   output folder                     (default: <MOSAIC DATA>/derivatives)
 #                   -p EXE   python executable                 (default: python3)
+#                   -g GLOB  transcript file patterns          (default: *_task-emtint.txt)
 #                   -h       help
 #                   Arguments after "--" are passed to BOTH Python scripts, so the two use
 #                   identical settings (e.g. --min-words 3, --no-fill, --keep-hesitations);
@@ -41,15 +42,17 @@ PARTICIPANTS_FILE="/data00/GUTS/francisca/interview_preliminary_analysis/partici
 MOSAIC_DATA_DIR="/data00/GUTS/francisca/interview_preliminary_analysis/MOSAIC/DATA"
 OUT_DIR=""
 PYTHON="python3"
+TRANSCRIPT_GLOB="*_task-emtint.txt"    # only these files are transcripts (other .txt files are ignored)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
  
 # Function to print help desk
-usage() { sed -n '2,44p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; }
 
 # Reading the options for the script 
-while getopts "i:l:m:o:p:h" opt; do
+while getopts "i:l:m:o:p:g:h" opt; do
     case "$opt" in
         i) TRANSCRIPTS_DIR="$OPTARG" ;;
+        g) TRANSCRIPT_GLOB="$OPTARG" ;;
         l) PARTICIPANTS_FILE="$OPTARG" ;;
         m) MOSAIC_DATA_DIR="$OPTARG" ;;
         o) OUT_DIR="$OPTARG" ;;
@@ -105,10 +108,10 @@ N_LISTED=$(printf "%s\n" "$PIDS" | grep -c . || true) # counts number of IDs
 [ "$N_LISTED" -gt 0 ] || fail "no participant IDs (starting with 'sub-') in $PARTICIPANTS_FILE"
 
 # Finding the transcripts 
-ALL_TXT="$(find "$TRANSCRIPTS_DIR" -type f -iname '*.txt' ! -path "$OUT_DIR/*" | sort)" # list every .txt file and matches pattern
+ALL_TXT="$(find "$TRANSCRIPTS_DIR" -type f -iname "$TRANSCRIPT_GLOB" ! -path "$OUT_DIR/*" | sort)" # list every .txt file and matches pattern
 
 # Output current information - where everything comes from and goes to 
-echo "Transcripts : $TRANSCRIPTS_DIR ($(printf "%s\n" "$ALL_TXT" | grep -c . || true) .txt files)"
+echo "Transcripts : $TRANSCRIPTS_DIR ($(printf "%s\n" "$ALL_TXT" | grep -c . || true) .txt files matching $TRANSCRIPT_GLOB)"
 echo "Participants: $PARTICIPANTS_FILE ($N_LISTED listed)"
 echo "Output      : $OUT_DIR"
 echo "MOSAIC data : $MOSAIC_DATA_DIR/preprocessed"
