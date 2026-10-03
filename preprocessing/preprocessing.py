@@ -460,7 +460,7 @@ def build_answers(turns, is_participant, min_words, remove_hesitations=True):
         prev = answers[-1] if answers else None # last answer created so far (None if first)
         # interviwer turns
         if not is_participant(t["speaker"]): 
-            nxt = next_participant(turns, is, is_participant) # participant turn that follows it
+            nxt = next_participant(turns, i, is_participant) # participant turn that follows it
             same_answer = (prev is not None and prev["_open"] and nxt is not None # still open previous answer - to add more turns to it
                            and nxt["moment"] == prev["moment"] == t["moment"] # make sure it is all part of the same moment
                            and nxt.get("evocation", False) == prev["evocation"]) # make sure next participant turn is the same kind as previous answer - either both readiness or real answers
