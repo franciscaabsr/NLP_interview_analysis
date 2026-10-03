@@ -60,8 +60,17 @@ MOMENT3_RE = re.compile(r"\b(?:wom[ae]n|mother|mom)\b", re.I)  # the woman (moth
 DEFERRAL_RE = re.compile( r"\b(?:that|this|it)(?:'s|\s+is|\s+was)\s+(?:\w+\s+){0,2}(?:moment|scene)\b"
     r"|\bwe(?:'ll|\s+will)\s+(?:\w+\s+){0,4}(?:after(?:wards)?|later)\b", re.I)
 
-# Signals the presence of non-verbal annotations in the text. Removed (with an adjacent comma) anywhere in an answer unless --keep-annotations.
-ANNOTATION_RE = re.compile(r"[()\[\]][^()\[\]]*[()\[\]]") 
+# Transcriber annotations ("(laughs)", "[inaudible]"). Transcripts sometimes have unmatched brackets, so annotations are removed in three steps (remove_annotations):
+#   1. ANNOTATION_RE: a matched pair of any length - (laughs), [inaudible], (long pause while looking down) - or a short mismatched pair - (laughs];
+#   2. STRAY_ANNOTATION_RE: an unclosed or unopened bracket next to a typical annotation word - "(laughs and then", "pause) I felt";
+#   3. STRAY_BRACKET_RE: any bracket left over is removed on its own, keeping the words around it ("tense) and then (relieved" -> "tense and then relieved").
+ANNOTATION_RE = re.compile(r"\([^()\[\]]*\)|\[[^()\[\]]*\]"            # matched pair, any length
+                           r"|\([^()\[\]]{0,20}\]|\[[^()\[\]]{0,20}\)")  # mismatched pair, short only
+ANNOTATION_WORDS = (r"laugh\w*|pause[sd]?|inaudible|unintelligible|unclear|sigh\w*|cough\w*|crosstalk|silence|chuckl\w|"
+                    r"overlapping|interrupt\w*|sniff\w*|exhal\w*|inhal\w*|clears throat|pause|smilling")
+STRAY_ANNOTATION_RE = re.compile(r"[(\[]\s*(?:" + ANNOTATION_WORDS + r")\b"
+                                 r"|\b(?:" + ANNOTATION_WORDS + r")\s*[)\]]", re.I)
+STRAY_BRACKET_RE = re.compile(r"[()\[\]]")
  
 # Pure hesitations: non-lexical sounds with no meaning of their own. Removed (with an adjacent comma) anywhere in an answer unless --keep-hesitations.
 # Lexical discourse markers ('yeah', 'okay', 'like', 'you know') are NOT removed from the text: they can carry meaning 
@@ -98,7 +107,7 @@ def parse_transcript(path: Path) -> list[dict]:
             pending_ts = ts.groups() # save new timestamp
             continue
         if pending_ts is not None: # new turn with a timestamp, check if it has a speaker label
-            m = SPEAKER_RE.match(line)
+            m = INTERVIEWER_RE.match(line)
             if m:
                 current = {"start": pending_ts[0], "end": pending_ts[1],
                            "speaker": m.group(1).strip(), "text": m.group(2).strip()} # to split speaker and text
@@ -124,11 +133,18 @@ def set_interviewer(turns, is_participant):
         None,
     )
 
+# Function to remove transcriber annotations, also with unmatched brackets
+def remove_annotations(text: str) -> str:
+    """Remove transcriber annotations, also with unmatched brackets (see ANNOTATION_RE)."""
+    text = ANNOTATION_RE.sub(" ", text)
+    text = STRAY_ANNOTATION_RE.sub(" ", text)
+    return STRAY_BRACKET_RE.sub(" ", text)
+
 # Function to clean the text of each turn
 def clean_text(text: str, remove_hesitations: bool = False) -> str:
     """Remove annotations (and optionally hesitations); tidy spaces, punctuation
     and dangling dashes. Words, numbers, case and punctuation are otherwise kept."""
-    text = ANNOTATION_RE.sub(" ", text) # replace annotations with a space
+    text = remove_annotations(text) # remove annotations (also with unmatched brackets)
     if remove_hesitations:
         text = HESITATION_RE.sub(" ", text)
     text = re.sub(r"\s+", " ", text) # collapse spaces
@@ -277,7 +293,7 @@ SCENES = {
     "celebration":     {"strong": [r"celebrat\w*", r"won", r"win", r"wins", r"winning", r"cheer\w*"],
                         "weak":   [r"crowd"]},
     # the woman (the boy's mother) comes in
-    "mother":          {"strong": [r"wom[ae]n", r"mother", r"mom", r"mum", r"hug\w*"],
+    "mother":          {"strong": [r"wom[ae]n", r"mother", r"mom", r"hug\w*"],
                         "weak":   [r"comes? in", r"came in", r"coming in", r"together"]},
     # father and son at the beach, having fun
     "beach":           {"strong": [r"beach", r"sea", r"sand", r"waves?", r"swim\w*", r"play\w*"],
@@ -351,7 +367,7 @@ def is_procedural(t, is_participant):
                 or (is_participant(t["speaker"]) and is_participant_question(t["text"])))
 
 # Function to determine scene of moment 1 (most intense scene) based on first turns (or all moment's turns if needed)
-def moment1_scene(turn, is_participant):
+def moment1_scene(turns, is_participant):
     """Classify the first SCENE_WINDOW_TURNS turns of moment 1, or all of moment 1 if those contain no scene keyword (confidence 'weak').
     Procedural turns (no content) are skipped"""
     m1 = [t["text"] for t in turns if t.get("moment") == 1 and not is_procedural(t, is_participant)]  # collects texts of all content turns related to moment 1
@@ -502,8 +518,11 @@ def build_answers(turns, is_participant, min_words, remove_hesitations=True):
     for a in answers:
         a.pop("_open", None)
         a["clean"] = clean_text(a["raw"], remove_hesitations) # cleaned text - annotations removed, hesitations removed if requested, punctuation tidied
-        a["n_annotations"] = len(ANNOTATION_RE.findall(a["raw"]))
-        a["n_hesitations"] = len(HESITATION_RE.findall(ANNOTATION_RE.sub(" ", a["raw"])))
+        a["n_annotations"] = (len(ANNOTATION_RE.findall(a["raw"]))
+                              + len(STRAY_ANNOTATION_RE.findall(ANNOTATION_RE.sub(" ", a["raw"]))))
+        a["n_stray_brackets"] = len(STRAY_BRACKET_RE.findall(STRAY_ANNOTATION_RE.sub(
+            " ", ANNOTATION_RE.sub(" ", a["raw"]))))  # unmatched brackets around speech: check the transcript
+        a["n_hesitations"] = len(HESITATION_RE.findall(remove_annotations(a["raw"])))
         a["n_words"] = n_words(a["clean"])
         a["drop_reason"] = ("evocation" if a["evocation"]
                             else "backchannel" if a["backchannel"]
@@ -609,7 +628,7 @@ def tag_sentence(sentence):
     fp = bool(FIRST_PERSON_RE.search(sentence)) # check if personal/experiencer sentence
     
     # core rule - evaluation OR experience with personal or no narrative in it
-    experiential = bool(evl) or (bool(exp) and (fp or not narr))
+    experiential = bool(evl) or bool(auto) or (bool(exp) and (fp or not narr))
     if experiential and narr:
         tag = "mixed"
     elif experiential:
@@ -618,7 +637,7 @@ def tag_sentence(sentence):
         tag = "narrative"
     else:
         tag = "other"
-    return tag, exp + evl, narr, fp
+    return tag, exp + evl, narr, fp, auto
  
  # Function to go over kept answers prepared before and tag sentences
 def tag_answers(answers, pid):
@@ -753,7 +772,7 @@ def process_file(f, args, is_participant, expected_pid=None):
         info[f"{seg}_words"] = n_words(doc) # number of kept words
         if doc.strip():  # missing moments get no file and no row
             res["docs"][seg] = to_document(subset, args.mode) # readable, dependent on mode
-            res["rows"].append({"segment": seg, "participant_id": pid, "cleaned_reflection": doc, # reflection answer is the column MOSAIC reads
+            res["rows"].append({"segment": seg, "participant_id": pid, "cleaned_reflection": doc, # cleaned_reflection is the column MOSAIC reads
                                 "n_answers": n_kept, "n_words": n_words(doc),
                                 "n_moments": sum(has.values()), "moment_source": source, # shows n_moments = 2 if only two moments, even if copied
                                 "m1_scene": dec["scene"], "m1_scene_confidence": dec["scene_conf"],
@@ -824,7 +843,7 @@ def combine(args, out_dir, mosaic_dir, listed=None):
     if listed is not None:
         present = {d.name.lower() for d in pdirs} # participant ids we have folder
         missing = [p for p in listed if p.lower() not in present] # participant ids that don't have folder
-        pdirs = [d for d in pdirs if d.name.lower() in set(listed)] # keep only folders of listed participants
+        pdirs = [d for d in pdirs if d.name.lower() in {p.lower() for p in listed}] # keep only folders of listed participants
         if missing:
             print(f"\n{len(missing)} listed participant(s) without processed data: {', '.join(missing)}")
     if not pdirs:
@@ -911,7 +930,8 @@ def main():
     ap.add_argument("--participant-regex", default=DEFAULT_PARTICIPANT_RE) # pattern for participant ID
     # set format of readable documents - just answers or Q&A format
     ap.add_argument("--mode", choices=["answers", "qa"], default="answers",
-                    help="answers = participant text only (recommended for topic modelling)")
+                    help="format of the readable .txt documents: answers only (default) or "
+                         "question-answer pairs; the MOSAIC datasets always contain answers only")
     ap.add_argument("--no-fill", "--no-fill-m3", dest="no_fill", action="store_true",
                     help="Do NOT copy moment 1 into a skipped moment 2/3 for 2-moment interviews "
                          "(default: copy, because there moment 1 = the celebration or mother scene)")
@@ -934,9 +954,9 @@ def main():
     
     # Setting up and folder creation
     data_dir = Path(args.data_dir)
-    out_dir = Path(args.out_dir) if args.out_dir else data_dir / f"derivatives"
+    out_dir = Path(args.out_dir) if args.out_dir else data_dir / "derivatives"
     mosaic_dir = data_dir / "preprocessed" # where MOSAIC's optuna_search.py looks for <dataset>_preprocessed.csv
-    for d in (raw_dir, out_dir):
+    for d in (mosaic_dir, out_dir):
         d.mkdir(parents=True, exist_ok=True)
     part_re = re.compile(args.participant_regex, re.I)
     # participant check variable set
@@ -971,7 +991,6 @@ def main():
     files = sorted(f for f in in_dir.rglob("*.txt") if out_dir.resolve() not in f.resolve().parents)
     if not files:
         sys.exit(f"No .txt files found in {in_dir}")
-    done = []
     # Process each file - one per participant
     for f in files:
         res = process_file(f, args, is_participant)
