@@ -117,11 +117,16 @@ If something is missing:
 - **`False` on the last line:** `sudo apt install python3-dev`, or the version-specific package such as `python3.10-dev`.
 - **Red Hat-type servers:** `sudo dnf groupinstall "Development Tools"` and `sudo dnf install python3-devel cmake`.
 
-**CUDA versions on our server:**
+**Our server (storm):**
 
-- the driver supports **CUDA 12.5** (`nvidia-smi`);
-- PyTorch's **cu126** packages work with it (step 3);
-- `nvcc` is used only in step 4.
+| Item | Value | Consequence |
+|---|---|---|
+| GPU | NVIDIA GeForce RTX 2080 Ti, 11 GB, compute capability 7.5 | Llama 8B (~6 GB) + embedding model (~1.5 GB) fit |
+| driver | supports CUDA **12.5** (`nvidia-smi`) | PyTorch **cu126** works (step 3); prebuilt llama-cpp-python **cu125** works (step 4) |
+| CUDA toolkit | `nvcc` **11.5**, Ubuntu package (`/usr/bin/nvcc`) | **too old to compile** llama-cpp-python for the GPU (step 4) |
+| compilers | gcc 11.4, cmake 3.22, Python 3.10 | fine for everything else |
+
+Check your GPU's compute capability with `nvidia-smi --query-gpu=name,compute_cap --format=csv,noheader`.
 
 If downloads hang in later steps, ask IT for the proxy setting (`export https_proxy=…`).
 
@@ -238,32 +243,84 @@ CUDA libraries, and doesn't touch the server's CUDA, the driver, or anyone else'
 
 ## Step 4. llama-cpp-python (Llama on the GPU)
 
-MOSAIC's topic labeller (`PhenoLabeler`) runs Llama through this library. It must be installed
-**before** MOSAIC's requirements, which would otherwise install a CPU-only build. It is compiled from
-source (10–20 min):
+MOSAIC's topic labeller (`PhenoLabeler`) runs Llama through this library. Install it **before**
+MOSAIC's requirements, which would otherwise install a CPU-only version.
+
+### 4a. Prebuilt GPU version (our server: use this)
+
+On our server, compiling for the GPU is not possible: `nvcc` 11.5 fails with gcc 11 (see 4c). Use a
+version already built for CUDA 12.5. It needs only the driver, not the compiler:
 
 ```bash
-CMAKE_BUILD_PARALLEL_LEVEL=8 CMAKE_ARGS="-DGGML_CUDA=on" \
+python -m pip uninstall -y llama-cpp-python           # in case a partial/CPU version is there
+python -m pip install llama-cpp-python --only-binary=llama-cpp-python --prefer-binary \
+    --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu125
+python -c "import llama_cpp; print(llama_cpp.__version__, '| GPU offload:', llama_cpp.llama_supports_gpu_offload())"
+```
+
+- **`--only-binary=llama-cpp-python`:** pip takes only a ready-made version and never tries to compile.
+- **Expected:** a version number and `GPU offload: True`.
+- **The address:** these versions can lag behind the newest release. If the address changes, check the llama-cpp-python README.
+
+**If the check fails with `libcudart.so.12` / `libcublas.so.12: cannot open shared object file`:** the
+server only has CUDA 11 libraries. The CUDA 12 libraries PyTorch installed in the environment (step 3)
+can be used instead. Store their location in the environment (once):
+
+```bash
+SP=$(python -c "import sysconfig; print(sysconfig.get_paths()['purelib'])")
+echo "export LD_LIBRARY_PATH=$SP/nvidia/cuda_runtime/lib:$SP/nvidia/cublas/lib:\$LD_LIBRARY_PATH" >> $PROJECT/MOSAIC/.mosaicvenv/bin/activate
+source $PROJECT/MOSAIC/.mosaicvenv/bin/activate
+python -c "import llama_cpp; print(llama_cpp.__version__, '| GPU offload:', llama_cpp.llama_supports_gpu_offload())"
+```
+
+**If no prebuilt version installs:** take the CPU version for now, which is enough for labelling
+10–20 topics: `python -m pip install llama-cpp-python`.
+
+### 4b. Compiling for the GPU (only on servers with a CUDA 12 toolkit)
+
+```bash
+CMAKE_BUILD_PARALLEL_LEVEL=8 CMAKE_ARGS="-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=75" \
     nice -n 10 python -m pip install llama-cpp-python --no-cache-dir
 ```
 
 | Part | Purpose |
 |---|---|
-| `CMAKE_ARGS="-DGGML_CUDA=on"` | build with GPU support |
-| `CMAKE_BUILD_PARALLEL_LEVEL=8` | compile with at most 8 cores (courtesy on the shared server; adapt to `nproc`) |
+| `-DGGML_CUDA=on` | build with GPU support |
+| `-DCMAKE_CUDA_ARCHITECTURES=75` | build only for your GPU (compute capability without the dot: 7.5 → `75`, 8.6 → `86`) |
+| `CMAKE_BUILD_PARALLEL_LEVEL=8` | compile with at most 8 cores (courtesy on the shared server) |
 | `nice -n 10` | lower priority, so colleagues' work goes first |
-| `--no-cache-dir` | fresh build, no reuse of an older CPU build |
 
-The last line should be `Successfully installed llama-cpp-python-…`.
+Installing a CUDA 12 toolkit on our server would need `sudo` (it goes into `/usr/local/cuda-12.x`,
+next to the old one, without touching the driver). It changes the shared server, so agree on it with
+whoever manages it first. It isn't needed for the preliminary analysis.
 
-**Effect on the server.** Everything is installed **only inside `.mosaicvenv`**. The build *uses* the
-system's compilers and CUDA toolkit, but changes nothing on the system and needs no `sudo`. While it
-compiles, it takes CPU (limited by the settings above) and temporary space in `caches/tmp`.
+### 4c. If a build fails
 
-**If the build fails:**
+The last lines (`ERROR: Failed building wheel for llama-cpp-python`) only say *that* it failed.
+Capture the log to see why:
 
-- **CUDA errors:** the CUDA toolkit (`nvcc`) and the driver must match. Check the llama-cpp-python README for the current flag name and prebuilt CUDA versions.
-- **Otherwise, install the CPU version for now:** `python -m pip install llama-cpp-python`. That's enough for labelling 10–20 topics.
+```bash
+CMAKE_ARGS="-DGGML_CUDA=on" python -m pip install llama-cpp-python --no-cache-dir -v 2>&1 | tee $PROJECT/caches/llama_build.log
+grep -n -iE "error|unsupported|not found|required" $PROJECT/caches/llama_build.log | head -30
+```
+
+| Message in the log | Cause | Fix |
+|---|---|---|
+| `parameter packs not expanded with '...'` (in `std_function.h`) | `nvcc` 11.5 is incompatible with gcc 11's C++ headers (**our server**) | use the prebuilt version (4a), or a CUDA ≥ 11.6 toolkit |
+| `Unsupported gpu architecture 'compute_…'` | the default build includes GPU generations this toolkit doesn't know | `-DCMAKE_CUDA_ARCHITECTURES=<your GPU>` (see 4b) |
+| `unsupported GNU version` | `gcc` newer than the toolkit accepts | add `-DCMAKE_CUDA_FLAGS=-allow-unsupported-compiler` to `CMAKE_ARGS` |
+| `No CMAKE_CUDA_COMPILER could be found` | `nvcc` not found | `export CUDACXX=/path/to/nvcc` |
+| `CMake 3.… or higher is required` | `cmake` too old | `python -m pip install -U cmake` (inside the environment) |
+| `No space left on device` | temporary space full | `df -h $PROJECT/caches/tmp` |
+
+**Effect on the server (4a–4c).** Everything is installed **only inside `.mosaicvenv`**. Compiling
+uses the system's compilers and CUDA toolkit but changes nothing on the system, and no `sudo` is
+needed.
+
+**After step 5,** run the `llama_cpp` check again: `requirements.txt` also lists `llama-cpp-python`.
+pip normally keeps the installed version. If `GPU offload` turns `False`, repeat 4a.
+
+Steps 5–7 don't depend on step 4, so continue with them while sorting out step 4 if needed.
 
 ---
 
@@ -573,7 +630,7 @@ nvidia-smi && export CUDA_VISIBLE_DEVICES=<free GPU>     # only before GPU work
 | Resource | Good practice |
 |---|---|
 | installing | only inside `.mosaicvenv`, with `python -m pip`; never `sudo pip` |
-| compiling (step 4) | `nice -n 10` and `CMAKE_BUILD_PARALLEL_LEVEL` |
+| compiling (step 4b) | `nice -n 10` and `CMAKE_BUILD_PARALLEL_LEVEL`; on our server the prebuilt version (4a) needs no compiling |
 | GPU choice | check `nvidia-smi`; set `CUDA_VISIBLE_DEVICES` to a free GPU |
 | GPU memory | shut down notebook kernels and finished processes; PyTorch keeps memory reserved until the process ends |
 | CPU cores | the thread limits from step 2 are on by default |
@@ -592,7 +649,9 @@ nvidia-smi && export CUDA_VISIBLE_DEVICES=<free GPU>     # only before GPU work
 | downloads hang | proxy: ask IT, then `export https_proxy=…` |
 | MOSAIC: model not found | environment not active (different `HF_HOME`), or step 7 skipped |
 | `torch.cuda.is_available()` is `False` | repeat step 3 (fallback: torch 2.6.0 cu124) |
-| step 4 fails on CUDA | match the toolkit to the driver, use a prebuilt version, or the CPU version for now |
+| step 4: `Failed building wheel for llama-cpp-python` | see step 4c; on our server (`nvcc` 11.5 + gcc 11): use the prebuilt cu125 version (4a) |
+| `libcudart.so.12` / `libcublas.so.12: cannot open shared object file` | prebuilt Llama version needs CUDA 12 libraries: the `LD_LIBRARY_PATH` line in step 4a |
+| `llama_supports_gpu_offload()` is `False` | a CPU-only version is installed (e.g. by step 5): repeat step 4a |
 | GPU out of memory | another GPU via `CUDA_VISIBLE_DEVICES`; lower `n_gpu_layers`; close old notebooks |
 | Optuna results look odd after changes | old trials mixed in: `rm -rf results/optuna/gutslei_answers_full` |
 | `import mosaic` fails | environment not active, or wrong `PYTHONPATH` line in `.mosaicvenv/bin/activate` |
