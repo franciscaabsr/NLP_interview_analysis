@@ -94,7 +94,6 @@ try:
 except ImportError:
     SENT_SPLITTER = "regex fallback (install nltk to match MOSAIC)"
 
-
 # Stopwords - to be excluded from the content-word frequencies
 try:
     from nltk.corpus import stopwords
