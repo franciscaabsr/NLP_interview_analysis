@@ -73,10 +73,11 @@ QC="$SCRIPT_DIR/quality_control.py"
 # ---------------------------------------------------------------- checks (to run successfully)
 # Error function to stop the script
 fail() { echo "ERROR: $*" >&2; exit 1; }
-command -v "$PYTHON" >/dev/null 2>&1 || fail "python not found: $PYTHON (use -p)" # checks whether program exists
-[ -f "$PREPARE" ] || fail "preprocessing.py not found next to this script ($SCRIPT_DIR)" # checks if file exists
+# checks whether program exists, if file exists, if folder exists
+command -v "$PYTHON" >/dev/null 2>&1 || fail "python not found: $PYTHON (use -p)" 
+[ -f "$PREPARE" ] || fail "preprocessing.py not found next to this script ($SCRIPT_DIR)" 
 [ -f "$QC" ]      || fail "quality_control.py not found next to this script ($SCRIPT_DIR)"
-[ -d "$TRANSCRIPTS_DIR" ]   || fail "transcripts folder not found: $TRANSCRIPTS_DIR (use -i)" # check if folder exists
+[ -d "$TRANSCRIPTS_DIR" ]   || fail "transcripts folder not found: $TRANSCRIPTS_DIR (use -i)" 
 [ -f "$PARTICIPANTS_FILE" ] || fail "participant list not found: $PARTICIPANTS_FILE (use -l)"
  
 TRANSCRIPTS_DIR="$(cd "$TRANSCRIPTS_DIR" && pwd)"      # absolute paths
@@ -101,10 +102,11 @@ printf "participant_id\ttranscript\n" > "$MAPPING"
  
 # ---------------------------------------------------------------- participant list
 # strip Windows line endings, comments, blanks; keep the first column; skip header 
-PIDS="$(tr -d '\r' < "$PARTICIPANTS_FILE" | sed 's/#.*//' \  # reading participant list, creating one ID per line
+# reading participant list, creating one ID per line
+PIDS="$(tr -d '\r' < "$PARTICIPANTS_FILE" | sed 's/#.*//' \  
         | awk -F'[,;\t ]+' 'NF && $1 != "" {print $1}' | tr -d '"' \
         | grep -Ei '^sub-' | awk '!seen[$0]++')"
-N_LISTED=$(printf "%s\n" "$PIDS" | grep -c . || true) # counts number of IDs
+N_LISTED=$(printf "%s\n" "$PIDS" | grep -c . || true)    # counts number of IDs
 [ "$N_LISTED" -gt 0 ] || fail "no participant IDs (starting with 'sub-') in $PARTICIPANTS_FILE"
 
 # Finding the transcripts 
@@ -126,8 +128,9 @@ for pid in $PIDS; do
     rm -rf "$OUT_DIR/participants/$pid"   # no results from earlier runs - clean slate
     # file name must contain the ID, not followed by another digit (so sub-gutslei001 does not match sub-gutslei0010)
     pid_re="$(printf "%s" "$pid" | sed 's/[.[\*^$]/\\&/g')" # regex safe version of the iD
-    matches="$(printf "%s\n" "$ALL_TXT" | while IFS= read -r f; do   # finds transcripts whose filename contains the ID
-                   [ -n "$f" ] && basename "$f" | grep -Eiq "${pid_re}([^0-9]|$)" && echo "$f"  # TODO correct this
+    # finds transcripts whose filename contains the ID - TODO correct this line
+    matches="$(printf "%s\n" "$ALL_TXT" | while IFS= read -r f; do   
+                   [ -n "$f" ] && basename "$f" | grep -Eiq "${pid_re}([^0-9]|$)" && echo "$f" 
                done)"
     n=$(printf "%s\n" "$matches" | grep -c . || true) 
     # no transcript found for pid
