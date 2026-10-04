@@ -66,8 +66,9 @@ DEFERRAL_RE = re.compile( r"\b(?:that|this|it)(?:'s|\s+is|\s+was)\s+(?:\w+\s+){0
 #   3. STRAY_BRACKET_RE: any bracket left over is removed on its own, keeping the words around it ("tense) and then (relieved" -> "tense and then relieved").
 ANNOTATION_RE = re.compile(r"\([^()\[\]]*\)|\[[^()\[\]]*\]"            # matched pair, any length
                            r"|\([^()\[\]]{0,20}\]|\[[^()\[\]]{0,20}\)")  # mismatched pair, short only
-ANNOTATION_WORDS = (r"laugh\w*|pause[sd]?|inaudible|unintelligible|unclear|sigh\w*|cough\w*|crosstalk|silence|chuckl\w|"
-                    r"overlapping|interrupt\w*|sniff\w*|exhal\w*|inhal\w*|clears throat|pause|smilling")
+ANNOTATION_WORDS = (r"laugh\w*|pause[sd]?|inaudible|unintelligible|unclear|sigh\w*|cough\w*|crosstalk|silence|chuckl\w*|"
+                    r"overlapping|interrupt\w*|sniff\w*|exhal\w*|inhal\w*|clears throat|smil\w*")
+
 STRAY_ANNOTATION_RE = re.compile(r"[(\[]\s*(?:" + ANNOTATION_WORDS + r")\b"
                                  r"|\b(?:" + ANNOTATION_WORDS + r")\s*[)\]]", re.I)
 STRAY_BRACKET_RE = re.compile(r"[()\[\]]")
@@ -296,8 +297,8 @@ SCENES = {
     "mother":          {"strong": [r"wom[ae]n", r"mother", r"mom", r"hug\w*"],
                         "weak":   [r"comes? in", r"came in", r"coming in", r"together"]},
     # father and son at the beach, having fun
-    "beach":           {"strong": [r"beach", r"sea", r"sand", r"waves?", r"swim\w*", r"play\w*"],
-                        "weak":   [r"fun", r"laugh\w*"]},
+    "beach":           {"strong": [r"beach", r"sea", r"sand", r"waves?", r"swim\w*"],
+                        "weak":   [r"fun", r"laugh\w*", r"play\w*"]},
     # the boxer sitting in the ring or lying on his side, before the fight
     "sitting_in_ring": {"strong": [r"(?:sitting|sat|sits?) (?:alone )?(?:in|on) the ring",
                                    r"(?:lying|laying|lay|lies) on (?:the|his) side",
@@ -381,7 +382,7 @@ def moment1_scene(turns, is_participant):
 # Function to organize moments, specially if moment 2 and/or 3 are missing, being copied from moment 1 then, plus check if moment 1 is ambiguous - for quality check
 def decide_moment_sources(turns, answers, is_participant, no_fill=False):
     """Decide, per moment, whether text is the participant's own, copied from moment 1 (2-moment interviews), missing or ambiguous. 
-    Used by both prepare_gutslei.py and qc_gutslei.py so they always agree.
+    Used by both preprocessing.py and quality_control.py so they always agree.
     Returns dict(has, scene, scene_conf, scene_evidence, source{1,2,3}, notes[(sev, msg)])."""
     has = {m: any(a["moment"] == m and a["kept"] for a in answers) for m in (1, 2, 3)} # dictionary that says if a moment has usable answers (answer a)
     scene, conf, ev, present = moment1_scene(turns, is_participant) # classify most intense moment according to scene
@@ -580,7 +581,7 @@ EVALUATION_RE = re.compile(r"\b(?:" + "|".join([
 # the viewing experience, and are removed before looking for film content, so
 # that "kid" in "when I was a kid" is not taken for a film character.
 AUTOBIO_RE = re.compile(
-    r"\b(?:my|our)\s+(?:own\s+)?(?:father|dad|daddy|mother|mom|mum|parents?|family|son|daughter|kids?|"
+    r"\b(?:my|our)\s+(?:own\s+)?(?:father|dad|daddy|mother|mom|parents?|family|son|daughter|kids?|"
     r"children|child|brother|sister|grandfather|grandmother|grandpa|grandma|grandparents?|husband|wife|"
     r"partner|childhood|life|past|home)\b"
     r"|\bwhen\s+(?:i|we)\s+(?:was|were)\s+(?:young|younger|little|small|a\s+(?:kid|child|boy|girl|teenager))\b"
@@ -590,7 +591,7 @@ AUTOBIO_RE = re.compile(
 NARRATIVE_RE = re.compile(r"(?<!\bmy )(?<!\bour )(?<!\byour )(?<!\bown )\b(?:" + "|".join([
     # characters (third person)
     r"he", r"him", r"his", r"she", r"her", r"they", r"them", r"their", r"boy", r"kid", r"child", r"son",
-    r"father", r"dad", r"daddy", r"mother", r"mom", r"mum", r"woman", r"women", r"boxer", r"champ", r"man",
+    r"father", r"dad", r"daddy", r"mother", r"mom", r"woman", r"women", r"boxer", r"champ", r"man",
     r"men", r"crowd", r"people", r"opponent", r"doctor", r"nurse", r"character\w*",
     # film events (words that only NAME the film - scene, film, movie, screen - are not
     # narrative: "it was a very sad scene" is about the participant's sadness)
@@ -943,7 +944,7 @@ def main():
     # check proper options, otherwise doesn't run
     ap.add_argument("--check-options", action="store_true", help=argparse.SUPPRESS)
     args, unknown = ap.parse_known_args()
-    # run_gutslei.sh passes the same options to both scripts: options of qc_gutslei.py are ignored here; anything else is a typo and stops the run (instead of silently using a default)
+    # run_preproc.sh passes the same options to both scripts: options of qc_gutslei.py are ignored here; anything else is a typo and stops the run (instead of silently using a default)
     QC_ONLY = {"--min-sentence-words", "--long-sentence", "--min-moment-words", "--min-participant-share",
                "--top-n", "--long-answer-tokens", "--per-participant-dir"}
     bad = [u for u in unknown if u.startswith("-") and u.split("=")[0] not in QC_ONLY]
@@ -964,7 +965,7 @@ def main():
     # reads participant list if given
     listed = read_participant_list(args.participants_file, part_re) if args.participants_file else None 
  
-    # --- Mode 2 - single transcript (used by run_gutslei.sh, one call per participant)
+    # --- Mode 2 - single transcript (used by run_preproc.sh, one call per participant)
     if args.input_file:
         f = Path(args.input_file)
         if not f.is_file(): # checks if file exists
