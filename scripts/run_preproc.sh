@@ -39,7 +39,7 @@ set -uo pipefail
 # Set default values and sets paths
 TRANSCRIPTS_DIR="/data00/GUTS/francisca/interview_preliminary_analysis/data"
 PARTICIPANTS_FILE="/data00/GUTS/francisca/interview_preliminary_analysis/participants.txt"
-MOSAIC_DATA_DIR="/data00/GUTS/francisca/interview_preliminary_analysis/MOSAIC/DATA"
+MOSAIC_DATA_DIR="/data00/GUTS/francisca/interview_preliminary_analysis/NLP_interview_analysis/MOSAIC/DATA"
 OUT_DIR=""
 PYTHON="python3"
 TRANSCRIPT_GLOB="*_task-emtint.txt"    # only these files are transcripts (other .txt files are ignored)

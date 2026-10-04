@@ -1,0 +1,22 @@
+# MOSAIC: separate repository, plus its environment, data and results inside it
+MOSAIC/
+
+# downloaded models, pip cache, temporary files
+caches/
+
+# anything derived from the interviews - never on GitHub
+**/DATA/
+**/derivatives/
+**/preprocessed/
+*_preprocessed.csv
+validation/
+topics*.csv
+*.db
+
+# Python, Jupyter and system clutter
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+.mosaicvenv/
+.DS_Store
