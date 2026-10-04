@@ -148,7 +148,10 @@ To use exactly the MOSAIC version recorded in `README.md`:
 git -C $PROJECT/MOSAIC checkout <commit from README.md>
 ```
 
-From here on, MOSAIC commands are run from `$PROJECT/MOSAIC`.
+**Where to run commands.**
+
+- **Installing packages** (`python -m pip install <package>`, steps 3, 4, 6, 7): the folder doesn't matter, only that the environment is **active**. pip installs into the active environment.
+- **Commands that use MOSAIC's files by a short path:** run them from `$PROJECT/MOSAIC`. These are `requirements.txt` (step 5), `src/mosaic/optuna_search.py` (step 11), Jupyter (step 12) and `DATA/…` (step 13). From another folder they fail with "No such file or directory".
 
 ---
 
@@ -210,6 +213,8 @@ print dependency warnings. Remove it with `rm -rf src/mosaic.egg-info`.
 
 ## Step 3. PyTorch for the GPU
 
+*(Any folder; the environment must be active.)*
+
 On pytorch.org → "Get Started", choose **Linux, Pip, Python**, and the CUDA version offered that is
 closest to the driver's version. On our server (driver: CUDA 12.5) that is **12.6**. It works through
 CUDA's minor-version compatibility within 12.x.
@@ -242,6 +247,8 @@ CUDA libraries, and doesn't touch the server's CUDA, the driver, or anyone else'
 ---
 
 ## Step 4. llama-cpp-python (Llama on the GPU)
+
+*(Any folder; the environment must be active.)*
 
 MOSAIC's topic labeller (`PhenoLabeler`) runs Llama through this library. Install it **before**
 MOSAIC's requirements, which would otherwise install a CPU-only version.
@@ -327,6 +334,7 @@ Steps 5–7 don't depend on step 4, so continue with them while sorting out step
 ## Step 5. MOSAIC's requirements
 
 ```bash
+cd $PROJECT/MOSAIC                              # requirements.txt is here (or use -r $PROJECT/MOSAIC/requirements.txt)
 python -m pip install -r requirements.txt
 python -m pip install optuna                    # needed by MOSAIC's search, missing from requirements.txt
 python -m pip check                             # ideally "No broken requirements found."
@@ -341,6 +349,8 @@ python -c "import torch; print(torch.__version__, torch.cuda.is_available())"   
 
 ## Step 6. Language resources
 
+*(Any folder; the environment must be active.)*
+
 ```bash
 python -m nltk.downloader stopwords punkt punkt_tab     # small, stored in ~/nltk_data
 python -m spacy download en_core_web_sm                 # only for the optional lemmatised keywords
@@ -349,6 +359,8 @@ python -m spacy download en_core_web_sm                 # only for the optional 
 ---
 
 ## Step 7. Download the models
+
+*(Any folder; the environment must be active, so that `HF_HOME` points to `caches/hf_cache`.)*
 
 MOSAIC's search script never downloads anything (it runs offline), so this must happen first:
 
@@ -654,6 +666,7 @@ nvidia-smi && export CUDA_VISIBLE_DEVICES=<free GPU>     # only before GPU work
 | `llama_supports_gpu_offload()` is `False` | a CPU-only version is installed (e.g. by step 5): repeat step 4a |
 | GPU out of memory | another GPU via `CUDA_VISIBLE_DEVICES`; lower `n_gpu_layers`; close old notebooks |
 | Optuna results look odd after changes | old trials mixed in: `rm -rf results/optuna/gutslei_answers_full` |
+| `Could not open requirements file` / `No such file or directory` | run from `$PROJECT/MOSAIC` (steps 5, 11–13) or give the full path |
 | `import mosaic` fails | environment not active, or wrong `PYTHONPATH` line in `.mosaicvenv/bin/activate` |
 | `run_gutslei.sh`: "Unknown option" | typo in an option after `--` (see `--help`) |
 | participant SKIPPED (several transcripts) | more than one file matches the ID and the pattern: adjust `-g` or remove the extra file |
