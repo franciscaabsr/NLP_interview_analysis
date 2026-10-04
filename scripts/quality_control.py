@@ -86,12 +86,14 @@ import preprocessing as prep  # noqa: E402
 # SECTION 1 - Tools used for quality control (woptional dependencies, all have fallbacks) and word patterns
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-# Sentence splitting
+# Sentence splitting: the same function as preprocessing.py (NLTK Punkt as in MOSAIC, or its fallback)
+split_sentences = prep.split_sentences
 try:
-    from nltk.tokenize import PunktSentenceTokenizer  # same as MOSAIC noqa: F401 - for sentence splitting
+    import nltk.tokenize  # noqa: F401  (only to report which splitter is used)
     SENT_SPLITTER = "nltk Punkt (as MOSAIC)"
 except ImportError:
     SENT_SPLITTER = "regex fallback (install nltk to match MOSAIC)"
+
 
 # Stopwords - to be excluded from the content-word frequencies
 try:
