@@ -47,7 +47,7 @@ INTRO_START_RE = re.compile(r"\bmost\s+intense\b", re.I)
 
 # Signals of readiness after evocation to remove - any combination of words (max. 8 words)
 READY_WORDS = set("""yes yeah yep ok okay alright all right sure fine good perfect great ready i im m am me let lets s start started go we can now so and 
-well here there it its is my eyes closed close see think set done too as no nope not yet clear question questions any understood understand""".split())
+well here there it its is my eyes closed close see think set done too as no nope not yet clear question questions any understood understand of course that""".split())
 
 # Participant questions to the interviewer - not to be analyzed
 PARTICIPANT_QUESTION_MAX_WORDS = 8
@@ -218,7 +218,7 @@ def prompt_end(turns, i, is_participant):
 # Function to find the first turn saying 'another moment' + scene keyword while making sure it is not a later reference to the scene (e.g. 'another moment' + 'celebration' but not 'mother' as a reference to the celebration scene)
 def find_moment_start(turns, is_participant, topic_re, after_idx, exclude_re=None):
     """First interviewer turn (after 'after_idx') saying 'another/next moment/scene' + scene keyword.
-    The keyword may also sit in the next interviewer turns, across short participant replies; only the INTERVIEWER's words are searched,
+        The keyword may also sit in the next interviewer turns, across short participant replies; only the INTERVIEWER's words are searched,
     so a participant mentioning a scene in passing cannot start a moment. If `exclude_re` is given, the prompt must not match that pattern."""
     for i, t in enumerate(turns): # i position, t turn
         if i <= after_idx or is_participant(t["speaker"]) or not is_transition(t["text"]):
