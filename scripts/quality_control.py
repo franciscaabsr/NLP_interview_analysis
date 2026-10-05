@@ -49,7 +49,7 @@
 #                                 participant words kept after minimum-length filter)
 #                                   - copied moments (2-moment interviews) are not included in the totalsper participant and moment, and aggregated per moment and worText cleaning 
 #                                 (for participant's text only): remove non-verbal annotations, hesitations, keep answers with min. 3 words (default)
-#                                   - All word counts (answers, sentences, totals, filler rates) use the prepare script's n_words, so they are on one scale; only the MOSAIC sentence 
+#                                   - All word counts (answers, sentences, totals, filler rates) use the preprocessing script's n_words, so they are on one scale; only the MOSAIC sentence 
 #                                 filter uses MOSAIC's own count.
 #                   - every issue is recorder in qc_flags.csv with severity level (ERROR to be fixed before modelling, WARN to be inspected, INFO for information)
 #                   - no language model is used; all steps are rule-based (regular expressions)
@@ -83,7 +83,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import preprocessing as prep  # noqa: E402
  
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-# SECTION 1 - Tools used for quality control (woptional dependencies, all have fallbacks) and word patterns
+# SECTION 1 - Tools used for quality control (optional dependencies, all have fallbacks) and word patterns
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 # Sentence splitting: the same function as preprocessing.py (NLTK Punkt as in MOSAIC, or its fallback)
@@ -131,7 +131,7 @@ TOKENS_PER_WORD = 1.4
 
 # Fillers including hesitations, discourse markers (little content) and like (ambiguous case) - counts are approximate as several markers are also ordinary words.
 FILLERS = {
-    "hesitation": prep.HESITATIONS,  # same list the prepare script removes
+    "hesitation": prep.HESITATIONS,  # same list the preprocessing script removes
     "discourse": [r"you know", r"i mean", r"i guess", r"actually", r"basically", r"let['’]?s say",
                   # "kind of"/"sort of" as hedge, not after a/the/this/... ("a kind of warmth")
                   r"(?<!\ba )(?<!\bthe )(?<!\bthis )(?<!\bthat )(?<!\bsome )(?<!\bwhat )(?<!\bany )"
@@ -148,7 +148,7 @@ FILLER_RES = {cat: re.compile(r"\b(?:" + "|".join(pats) + r")\b", re.I) for cat,
 # single word, so this list holds the single words that are fillers or acknowledgements:
 #   - every word matching a hesitation pattern (mhm, hmmm, ...): HESITATION_WORD_RE;
 #   - the one-word discourse markers and the ambiguous words of FILLERS;
-#   - the prepare script's acknowledgement words (BACKCHANNEL_WORDS), except words that can also describe experience ("see", "good"; "i" is a stopword anyway).
+#   - the preprocessing script's acknowledgement words (BACKCHANNEL_WORDS), except words that can also describe experience ("see", "good"; "i" is a stopword anyway).
 # The parts of phrases ("know" in "you know", "kind" in "kind of") are NOT excluded: as single words they are often content ("I didn't know", "he was kind").
 HESITATION_WORD_RE = re.compile(r"(?:" + "|".join(prep.HESITATIONS) + r")", re.I)
 NON_CONTENT_WORDS = ({"actually", "basically", "well", "okay", "ok", "yeah", "like"}
@@ -302,7 +302,7 @@ def qc_file(path, is_participant, args, flags, store):
             "moment2_start": info["moment2_start"], "moment3_start": info["moment3_start"]}
     if seg_turns is None: # no moment 1 - file cannot be segmented
         flags.add(fname, pid, "moments", "ERROR",
-                  "'most intense' not found in an interviewer turn -> file excluded by prepare script")
+                  "'most intense' not found in an interviewer turn -> file excluded by preprocessing script")
         mrow["status"] = "EXCLUDED (no 'most intense')"
         store["moments"].append(mrow)
         return
@@ -333,7 +333,7 @@ def qc_file(path, is_participant, args, flags, store):
                   f"'{seg_turns[idx]['text'][:80]}' (new wording? add it to MOMENT2_RE / MOMENT3_RE)")
     # builds answers like the preprocessing script
     answers = prep.build_answers(seg_turns, is_participant, args.min_words, not args.keep_hesitations)
-    for k, a in enumerate(answers, 1):  # same answer IDs as the prepare script (process_file)
+    for k, a in enumerate(answers, 1):  # same answer IDs as the preprocessing script (process_file)
         a["answer_id"] = f"{pid}_m{a['moment']}_a{k:03d}"
  
     # duration & words per moment
@@ -449,11 +449,11 @@ def main():
     ap.add_argument("--input-dir", required=True)
     ap.add_argument("--out-dir", default="qc")
     ap.add_argument("--participant-regex", default=prep.DEFAULT_PARTICIPANT_RE,
-                    help="same option as prepare script (must match the whole label)")
-    ap.add_argument("--min-words", type=int, default=3, help="answer filter (same as prepare script)")
-    ap.add_argument("--keep-hesitations", action="store_true", help="same flag as prepare script")
+                    help="same option as preprocessing script (must match the whole label)")
+    ap.add_argument("--min-words", type=int, default=3, help="answer filter (same as preprocessing script)")
+    ap.add_argument("--keep-hesitations", action="store_true", help="same flag as preprocessing script")
     ap.add_argument("--no-fill", "--no-fill-m3", dest="no_fill", action="store_true",
-                    help="same flag as prepare script")
+                    help="same flag as preprocessing script")
     # quality control thresholds
     ap.add_argument("--min-sentence-words", type=int, default=3, help="MOSAIC sentence filter (min_word_count)")
     ap.add_argument("--long-sentence", type=int, default=60, help="flag sentences longer than this")

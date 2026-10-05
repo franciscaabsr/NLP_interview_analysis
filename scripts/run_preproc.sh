@@ -13,12 +13,12 @@
 #                   (one row per answer, recommended) and <mosaic-data>/preprocessed/gutslei_{full,moment1,moment2,moment3}_preprocessed.csv (one row per participant).
 #                   - step 5 - run quality_control.py on selected participants (report in <out>/qc, plus <ID>_qc_flags.csv in each participant folder).
 #                   - step 6 - write summary: <out>/run_summary.txt and <out>/selected_files.tsv(participant -> transcript path)
-# usage           : ./run_preproc.sh -1 participants.txt
-#                   ./run_preproc.sh -i /data -1 participants.txt -m /path/to/MOSAIC/DATA -- --min-words 3
+# usage           : ./run_preproc.sh                           (uses the default paths below)
+#                   ./run_preproc.sh -i /path/to/transcripts -1 participants.txt -m /path/to/MOSAIC/DATA -- --min-word 33
 #
-#                   -i DIR   transcripts folder                (default: /data)
-#                   -l FILE  participant list                  (default: participants.txt)
-#                   -m DIR   MOSAIC DATA folder (MOSAIC/DATA)  (default: ./DATA)
+#                   -i DIR   transcripts folder                (default: /TRANSCRIPTS_DIR)
+#                   -l FILE  participant list                  (default: PARTICIPANTS_FILE)
+#                   -m DIR   MOSAIC DATA folder (MOSAIC/DATA)  (default: MOSAIC_DATA_DIR)
 #                   -o DIR   output folder                     (default: <MOSAIC DATA>/derivatives)
 #                   -p EXE   python executable                 (default: python3)
 #                   -g GLOB  transcript file patterns          (default: *_task-emtint.txt)
@@ -45,8 +45,8 @@ PYTHON="python3"
 TRANSCRIPT_GLOB="*_task-emtint.txt"    # only these files are transcripts (other .txt files are ignored)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
  
-# Function to print help desk
-usage() { sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; }
+# Function to print help
+usage() { awk 'NR > 1 && !/^#/ {exit} NR > 1 {sub(/^# ?/, ""); print}' "$0"; }
 
 # Reading the options for the script 
 while getopts "i:l:m:o:p:g:h" opt; do
@@ -98,12 +98,12 @@ printf "participant_id\ttranscript\n" > "$MAPPING"
 "$PYTHON" "$PREPARE" --combine --check-options ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} \
     || fail "invalid option(s) for preprocessing.py (see message above)"
 "$PYTHON" "$QC" --input-dir . --check-options ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} \
-    || fail "invalid option(s) for qc_gutslei.py (see message above)"
+    || fail "invalid option(s) for quality_control.py (see message above)"
  
 # ---------------------------------------------------------------- participant list
 # strip Windows line endings, comments, blanks; keep the first column; skip header 
 # reading participant list, creating one ID per line
-PIDS="$(tr -d '\r' < "$PARTICIPANTS_FILE" | sed 's/#.*//' \  
+PIDS="$(tr -d '\r' < "$PARTICIPANTS_FILE" | sed 's/#.*//' \
         | awk -F'[,;\t ]+' 'NF && $1 != "" {print $1}' | tr -d '"' \
         | grep -Ei '^sub-' | awk '!seen[$0]++')"
 N_LISTED=$(printf "%s\n" "$PIDS" | grep -c . || true)    # counts number of IDs
@@ -113,7 +113,7 @@ N_LISTED=$(printf "%s\n" "$PIDS" | grep -c . || true)    # counts number of IDs
 ALL_TXT="$(find "$TRANSCRIPTS_DIR" -type f -iname "$TRANSCRIPT_GLOB" ! -path "$OUT_DIR/*" | sort)" # list every .txt file and matches pattern
 
 # Output current information - where everything comes from and goes to 
-echo "Transcripts : $TRANSCRIPTS_DIR ($(printf "%s\n" "$ALL_TXT" | grep -c . || true) .txt files matching $TRANSCRIPT_GLOB)"
+echo "Transcripts : $TRANSCRIPTS_DIR ($(printf "%s\n" "$ALL_TXT" | grep -c . || true) files matching $TRANSCRIPT_GLOB)"
 echo "Participants: $PARTICIPANTS_FILE ($N_LISTED listed)"
 echo "Output      : $OUT_DIR"
 echo "MOSAIC data : $MOSAIC_DATA_DIR/preprocessed"
@@ -128,7 +128,7 @@ for pid in $PIDS; do
     rm -rf "$OUT_DIR/participants/$pid"   # no results from earlier runs - clean slate
     # file name must contain the ID, not followed by another digit (so sub-gutslei001 does not match sub-gutslei0010)
     pid_re="$(printf "%s" "$pid" | sed 's/[.[\*^$]/\\&/g')" # regex safe version of the iD
-    # finds transcripts whose filename contains the ID - TODO correct this line
+    # finds transcripts whose filename contains the ID
     matches="$(printf "%s\n" "$ALL_TXT" | while IFS= read -r f; do   
                    [ -n "$f" ] && basename "$f" | grep -Eiq "${pid_re}([^0-9]|$)" && echo "$f" 
                done)"
@@ -152,7 +152,7 @@ for pid in $PIDS; do
     "$PYTHON" "$PREPARE" --input-file "$file" --participant "$pid" \
         --data-dir "$MOSAIC_DATA_DIR" --out-dir "$OUT_DIR" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} \
         > "$LOGS/$pid.log" 2>&1
-    code=$?   # exit code of last comment
+    code=$?   # exit code of last command
     last="$(grep -E "^$pid_re: " "$LOGS/$pid.log" | tail -1 | cut -d'|' -f1-3)"  # takes result line from preprocessing.py main()
     # sorts result by exit code
     case $code in
