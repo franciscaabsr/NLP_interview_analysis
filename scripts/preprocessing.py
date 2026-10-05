@@ -57,8 +57,9 @@ MOMENT_TRANSITION_RE = re.compile(r"\b(?:another|other|next|different|new|final|
 MOMENT2_RE = re.compile(r"celebrat", re.I)  # celebration / celebrating
 MOMENT3_RE = re.compile(r"\b(?:wom[ae]n|mother|mom)\b", re.I)  # the woman (mother) comes in
 # Deferrals: when interviewer postpones moment participant brings up, to still focus on the moment they are in
-DEFERRAL_RE = re.compile( r"\b(?:that|this|it)(?:'s|\s+is|\s+was)\s+(?:\w+\s+){0,2}(?:moment|scene)\b"
-    r"|\bwe(?:'ll|\s+will)\s+(?:\w+\s+){0,4}(?:after(?:wards)?|later)\b", re.I)
+DEFERRAL_RE = re.compile(r"\b(?:that|this|it)(?:'s|’s|\s+is|\s+was|\s+will\s+be)\s+(?:(?:on|in|for|part\s+of)\s+)?(?:a\s+|an\s+)?"
+                         r"(?:another|other|different|separate|later)\s+(?:moment|scene|part)\b"
+                         r"|\bwe(?:'ll|’ll|\s+will)\s+(?:\w+\s+){0,4}(?:after(?:wards)?|later)\b", re.I)
 
 # Transcriber annotations ("(laughs)", "[inaudible]"). Transcripts sometimes have unmatched brackets, so annotations are removed in three steps (remove_annotations):
 #   1. ANNOTATION_RE: a matched pair of any length - (laughs), [inaudible], (long pause while looking down) - or a short mismatched pair - (laughs];
