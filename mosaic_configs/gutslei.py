@@ -42,13 +42,13 @@ HEDGES_AND_VAGUE = {
     "thing", "things", "something", "stuff", "also", "even", "much", "way",
     "think", "say", "said", "get", "got", "go", "going", "gonna", "would",
     "could", "one", "still", "anything", "everything", "sometimes", "mostly",
-    "would", "made", "thing",
+    "would", "made", "thing", "saw", "see", "came",
 }
 INTERVIEW_FRAME = {
     "movie", "film", "scene", "scenes", "moment", "moments", "part", "parts",
     "watching", "watched", "watch", "video", "screen", "time",
     "first", "second", "third", "last", "final", "beginning", "end",
-    "intense", "saw", "see", "won", "dead", "died", "came", 
+    "intense", 
 }
 # Lists experience verbs that may appear in nearly every topic - enable it if qc_words_content.csv shows they are used by most participants and they crowd out more specific keywords
 OPTIONAL_HIGH_FREQ = {
