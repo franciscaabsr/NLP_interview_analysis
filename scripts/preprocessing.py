@@ -194,25 +194,37 @@ def is_transition(text: str) -> bool:
     """Interviewer text that moves to another part of the film (and is not a deferral)."""
     return bool(MOMENT_TRANSITION_RE.search(text)) and not DEFERRAL_RE.search(text) 
 
+# A moment prompt can take several turns, with short participant replies in between
+PROMPT_REPLY_MAX_WORDS = 6 # participant replies
+PROMPT_MAX_TURNS = 15 # prompt is searched for the scene keyword over at most this many turns
+
+# Function to check if a participant turn is only a short reply during the interviewer's prompt
+def is_prompt_reply(text: str) -> bool:
+    """Backchannel, readiness reply, participant question or short reply (<= PROMPT_REPLY_MAX_WORDS words) - does not end a moment prompt."""
+    return (is_backchannel(text) or is_ready_reply(text) or is_participant_question(text)
+            or n_words(clean_text(text, True)) <= PROMPT_REPLY_MAX_WORDS)
+
 # Function to find when moment/scene prompt ends (consecutive turns from the interviewer or participant backchannels)
 def prompt_end(turns, i, is_participant):
-    """Return the index of the last turn of the prompt starting at turn i. Interviewer turns and participant backchannels ('Yeah', 'Mhm') are
-    included; stops before the participant's first real answer."""
+    """Return the index of the last turn of the prompt starting at turn i. Interviewer turns and participant backchannels ('Yeah', 'Mhm', 'Short replies') are
+    included; stops before the participant's first real answer or after PROMPT_MAX_TURNS turns."""
     j = i
-    while j + 1 < len(turns) and (not is_participant(turns[j + 1]["speaker"]) # looks at next turn to check
-                                  or is_backchannel(turns[j + 1]["text"])):
+    while (j + 1 < len(turns) and j + 1 - i < PROMPT_MAX_TURNS
+           and (not is_participant(turns[j + 1]["speaker"]) # looks at next turn to check
+                                  or is_prompt_reply(turns[j + 1]["text"]))):
         j += 1
     return j
 
 # Function to find the first turn saying 'another moment' + scene keyword while making sure it is not a later reference to the scene (e.g. 'another moment' + 'celebration' but not 'mother' as a reference to the celebration scene)
 def find_moment_start(turns, is_participant, topic_re, after_idx, exclude_re=None):
     """First interviewer turn (after 'after_idx') saying 'another/next moment/scene' + scene keyword.
-    The keyword may also sit in the next interviewer turns, across participan backchannels.
-    If `exclude_re` is given, the prompt must not match that pattern."""
+    The keyword may also sit in the next interviewer turns, across short participant replies; only the INTERVIEWER's words are searched,
+    so a participant mentioning a scene in passing cannot start a moment. If `exclude_re` is given, the prompt must not match that pattern."""
     for i, t in enumerate(turns): # i position, t turn
         if i <= after_idx or is_participant(t["speaker"]) or not is_transition(t["text"]):
             continue
-        prompt = " ".join(x["text"] for x in turns[i:prompt_end(turns, i, is_participant) + 1])
+        prompt = " ".join(x["text"] for x in turns[i:prompt_end(turns, i, is_participant) + 1]
+                          if not is_participant(x["speaker"])) # interviewer's words only
         if topic_re.search(prompt) and not (exclude_re and exclude_re.search(prompt)): # makes sure that turn is not mentioning the pattern outside the scene 
             return i
     return None
