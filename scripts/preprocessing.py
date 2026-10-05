@@ -194,7 +194,7 @@ def is_transition(text: str) -> bool:
     """Interviewer text that moves to another part of the film (and is not a deferral). Checked on the text without hesitations and annotations,
     so "the last, uh, scene" or "the final (pause) scene" count too."""
     c = clean_text(text, True)
-    return bool(MOMENT_TRANSITION_RE.search(text)) and not DEFERRAL_RE.search(text) 
+    return bool(MOMENT_TRANSITION_RE.search(c)) and not DEFERRAL_RE.search(c) 
 
 # A moment prompt can take several turns, with short participant replies in between
 PROMPT_REPLY_MAX_WORDS = 6 # participant replies
