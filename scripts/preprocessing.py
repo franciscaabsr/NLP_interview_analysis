@@ -34,6 +34,12 @@ import warnings
 from pathlib import Path          
 import pandas as pd               
 
+python - <<EOF
+import pandas as pd
+a = pd.read_csv("$D/participants/sub-gutslei0083/sub-gutslei0083_audit.csv")
+print(a[a.moment.astype(str) == "2"][["start", "kept", "drop_reason", "clean"]].to_string(index=False))
+EOF
+
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # SECTION 0: Configuration and patterns
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -191,7 +197,9 @@ def join_continuation(first: str, second: str) -> str:
 
 # Function to check if the turn is a transition to another moment/scene (not a deferral)
 def is_transition(text: str) -> bool:
-    """Interviewer text that moves to another part of the film (and is not a deferral)."""
+    """Interviewer text that moves to another part of the film (and is not a deferral). Checked on the text without hesitations and annotations,
+    so "the last, uh, scene" or "the final (pause) scene" count too."""
+    c = clean_text(text, True)
     return bool(MOMENT_TRANSITION_RE.search(text)) and not DEFERRAL_RE.search(text) 
 
 # A moment prompt can take several turns, with short participant replies in between
