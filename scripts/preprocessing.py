@@ -34,12 +34,6 @@ import warnings
 from pathlib import Path          
 import pandas as pd               
 
-python - <<EOF
-import pandas as pd
-a = pd.read_csv("$D/participants/sub-gutslei0083/sub-gutslei0083_audit.csv")
-print(a[a.moment.astype(str) == "2"][["start", "kept", "drop_reason", "clean"]].to_string(index=False))
-EOF
-
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # SECTION 0: Configuration and patterns
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
