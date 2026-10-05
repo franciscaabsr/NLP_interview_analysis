@@ -42,7 +42,7 @@ On the lab server: `PROJECT=/data00/GUTS/francisca/interview_preliminary_analysi
 ```
 NLP_interview_analysis/                 ← PROJECT
 ├── .gitignore, README.md, SETUP.md, requirements-lock.txt   (GitHub)
-├── scripts/            ← preprocessing.py, run_gutslei.sh, qc_gutslei.py, analyse_gutslei.py   (GitHub)
+├── scripts/            ← preprocessing.py, run_preproc.sh, quality_control.py, analyse_gutslei.py   (GitHub)
 ├── mosaic_configs/     ← the 10 gutslei config files, master copy                               (GitHub)
 ├── participants.txt    ← one participant ID per line                                           (GitHub if allowed)
 ├── caches/             ← models, pip cache, temporary files                                    (never on GitHub)
@@ -336,11 +336,12 @@ Steps 5–7 don't depend on step 4, so continue with them while sorting out step
 ```bash
 cd $PROJECT/MOSAIC                              # requirements.txt is here (or use -r $PROJECT/MOSAIC/requirements.txt)
 python -m pip install -r requirements.txt
-python -m pip install optuna                    # needed by MOSAIC's search, missing from requirements.txt
+python -m pip install optuna langdetect python-dotenv pyyaml   # used by MOSAIC but missing from requirements.txt
 python -m pip check                             # ideally "No broken requirements found."
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"   # still …+cu126 True?
 ```
 
+- **The packages MOSAIC forgot.** `requirements.txt` doesn't list everything MOSAIC imports. `optuna` is used by the search script. `langdetect` and `python-dotenv` are used by MOSAIC's own preprocessing module, which `src/mosaic/__init__.py` loads whenever anything from `mosaic` is imported, so they're needed even though we don't use that preprocessing. `pyyaml` is usually installed already; listing it does no harm.
 - **`bitsandbytes` errors** can be ignored. It's only used for experiments we don't run.
 - **If the last line now says `False`**, another package replaced PyTorch: repeat step 3.
 - **Don't run `pip install -e .`.** It fails below Python 3.12, and `PYTHONPATH` replaces it.
@@ -415,9 +416,29 @@ print(llm('Give a 3-word title for: my chest got tight; a knot in my stomach. Ti
 
 - `imports ok`;
 - `(1, 1024)`;
-- a short title. With the GPU build, the output mentions `offloaded 33/33 layers to GPU`.
+- a short title (e.g. "Tense Moment Approaches"), possibly followed by more text. The raw test prompt has no stop signal, so the model writes until the 12-token limit; MOSAIC's labeller uses a chat prompt with stop tokens.
+- Lines mentioning `CUDA0` (e.g. `CUDA0 compute buffer`) show that the GPU is used. `CUDA Graph … reused` lines are information only.
 
-If GPU memory is tight, use `n_gpu_layers=20` instead of `-1`.
+**Speed check.** The first run on a GPU is slow (on our server: ~30 s), because the driver translates the
+prebuilt library for this GPU once and stores the result in `~/.nv/ComputeCache`. Run the test again,
+silent and timed:
+
+```bash
+nvidia-smi --query-gpu=index,memory.used,memory.total --format=csv    # ~7 GB free on your GPU?
+python -c "
+from huggingface_hub import hf_hub_download; from llama_cpp import Llama
+p = hf_hub_download('NousResearch/Meta-Llama-3-8B-Instruct-GGUF', 'Meta-Llama-3-8B-Instruct-Q4_K_M.gguf')
+llm = Llama(model_path=p, n_gpu_layers=-1, n_ctx=4096, verbose=False)
+import time; t = time.time()
+print(llm('Give a 3-word title for: my chest got tight; a knot in my stomach. Title:', max_tokens=12)['choices'][0]['text'])
+print(f'{time.time() - t:.1f} s')"
+```
+
+**`n_gpu_layers`** sets how many of the model's 33 layers run on the GPU:
+
+- **`-1`, all 33:** fastest, about 1–3 s for this test on an RTX 2080 Ti. It needs ~6 GB of free GPU memory, which fits on an 11 GB card that isn't busy.
+- **A lower value such as `20`:** use it if the GPU is busy or reports "out of memory". The rest runs on the CPU, which is slower, but still fine for labelling 10–20 topics.
+- **`verbose=False`:** hides llama.cpp's information messages.
 
 ---
 
@@ -427,8 +448,8 @@ If GPU memory is tight, use `n_gpu_layers=20` instead of `-1`.
 
 ```bash
 mkdir -p $PROJECT/scripts
-chmod +x $PROJECT/scripts/run_gutslei.sh
-ls $PROJECT/scripts        # preprocessing.py  run_gutslei.sh  qc_gutslei.py  analyse_gutslei.py
+chmod +x $PROJECT/scripts/run_preproc.sh
+ls $PROJECT/scripts        # preprocessing.py  run_preproc.sh  quality_control.py  analyse_gutslei.py
 ```
 
 **9b. Configs.** Keep the master copy in `mosaic_configs/` and link it into MOSAIC:
@@ -460,8 +481,15 @@ Blank lines, `#` comments and a header are ignored; a CSV first column also work
 ## Step 10. Preprocess and check
 
 ```bash
-TRANSCRIPTS=/path/to/the/transcripts        # outside the project folder
-$PROJECT/scripts/run_gutslei.sh -i $TRANSCRIPTS -l $PROJECT/participants.txt -m $PROJECT/MOSAIC/DATA
+$PROJECT/scripts/run_preproc.sh
+```
+
+The default paths are set at the top of `run_preproc.sh` (`TRANSCRIPTS_DIR`, `PARTICIPANTS_FILE`,
+`MOSAIC_DATA_DIR`), so on our server no options are needed. Elsewhere, or for other folders, give them
+explicitly (or edit the defaults):
+
+```bash
+$PROJECT/scripts/run_preproc.sh -i /path/to/the/transcripts -l $PROJECT/participants.txt -m $PROJECT/MOSAIC/DATA
 ```
 
 | Option | Meaning |
@@ -470,6 +498,7 @@ $PROJECT/scripts/run_gutslei.sh -i $TRANSCRIPTS -l $PROJECT/participants.txt -m 
 | `-l` | participant list |
 | `-m` | MOSAIC's `DATA` folder (MOSAIC only looks there) |
 | `-- <options>` | passed to the Python scripts, e.g. `-- --min-words 4`; a mistyped option stops the run immediately |
+| `-h` | help (the script's header) |
 
 **What you see:** one line per participant (OK / CHECK / EXCLUDED / ID MISMATCH / FAILED / MISSING / SKIPPED), then a summary.
 
@@ -628,11 +657,42 @@ First time only:
 
 ## Every time you work on this
 
+### Start of the day (5 min)
+
 ```bash
-tmux attach -t mosaic                     # or: tmux new -s mosaic
+# 1. session: continue yesterday's, or start a new one
+tmux attach -t mosaic || tmux new -s mosaic
+
+# 2. environment: sets PROJECT, PYTHONPATH, HF_HOME, caches and thread limits (step 2)
 source /data00/GUTS/francisca/interview_preliminary_analysis/NLP_interview_analysis/MOSAIC/.mosaicvenv/bin/activate
+
+# 3. check that everything is in place
+which python                                   # …/MOSAIC/.mosaicvenv/bin/python
+echo $PROJECT $HF_HOME                         # both set (empty = environment not active)
+python -c "import mosaic, bertopic, torch; print('environment ok | GPU:', torch.cuda.is_available())"
+
+# 4. project state: anything left uncommitted yesterday?
+cd $PROJECT && git status --short
+
+# 5. before GPU work only: pick a free GPU (little memory in use)
+nvidia-smi --query-gpu=index,name,memory.used,memory.total --format=csv
+export CUDA_VISIBLE_DEVICES=0                  # number of the free GPU
+
+# 6. work from the MOSAIC folder (MOSAIC commands, Jupyter, analysis)
 cd $PROJECT/MOSAIC
-nvidia-smi && export CUDA_VISIBLE_DEVICES=<free GPU>     # only before GPU work
+```
+
+The environment, `CUDA_VISIBLE_DEVICES` and `cd` apply to **one terminal**: repeat steps 2, 5 and 6
+in every new `tmux` window (`Ctrl-b`, then `c`).
+
+### End of the day (5 min)
+
+```bash
+# Jupyter: Kernel -> Shut Down Kernel for each notebook, then Ctrl-c twice in its window (frees GPU memory)
+nvidia-smi                                     # none of your processes should still hold GPU memory
+cd $PROJECT && git status                      # commit scripts/configs/docs you changed (never data)
+git add scripts/ mosaic_configs/ SETUP.md README.md && git commit -m "<what changed>" && git push
+# leave tmux running with Ctrl-b, then d (long runs continue)
 ```
 
 ---
@@ -665,10 +725,13 @@ nvidia-smi && export CUDA_VISIBLE_DEVICES=<free GPU>     # only before GPU work
 | `libcudart.so.12` / `libcublas.so.12: cannot open shared object file` | prebuilt Llama version needs CUDA 12 libraries: the `LD_LIBRARY_PATH` line in step 4a |
 | `llama_supports_gpu_offload()` is `False` | a CPU-only version is installed (e.g. by step 5): repeat step 4a |
 | GPU out of memory | another GPU via `CUDA_VISIBLE_DEVICES`; lower `n_gpu_layers`; close old notebooks |
+| Llama very slow (first run ~30 s) | normal on the first run (one-time GPU translation); if still slow: `n_gpu_layers=-1` and check `nvidia-smi` for other users of the GPU |
 | Optuna results look odd after changes | old trials mixed in: `rm -rf results/optuna/gutslei_answers_full` |
 | `Could not open requirements file` / `No such file or directory` | run from `$PROJECT/MOSAIC` (steps 5, 11–13) or give the full path |
+| `No module named 'langdetect'` / `'dotenv'` / `'optuna'` | MOSAIC imports packages missing from its requirements: `python -m pip install optuna langdetect python-dotenv pyyaml` (step 5) |
+| warning that `google.generativeai` is deprecated | harmless: part of MOSAIC's optional Gemini preprocessing, which we don't use |
 | `import mosaic` fails | environment not active, or wrong `PYTHONPATH` line in `.mosaicvenv/bin/activate` |
-| `run_gutslei.sh`: "Unknown option" | typo in an option after `--` (see `--help`) |
+| `run_preproc.sh`: "Unknown option" | typo in an option after `--` (see `--help`) |
 | participant SKIPPED (several transcripts) | more than one file matches the ID and the pattern: adjust `-g` or remove the extra file |
 | participant ID MISMATCH | the speaker label in the transcript differs from the ID in the file name |
 | an installation fails because of the Python version | Python 3.12 via `uv` (no sudo): `curl -LsSf https://astral.sh/uv/install.sh \| sh`, then `uv python install 3.12`, then `uv venv --python 3.12 .mosaicvenv`, then redo step 2b onwards |
