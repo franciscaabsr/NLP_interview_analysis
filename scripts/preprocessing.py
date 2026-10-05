@@ -306,7 +306,10 @@ def segment(turns, is_participant, fname):
 # crying, the table) are weak; scene-specific events are strong. Patterns use only non-capturing groups (?:...).
 SCENES = {
     # the boxer's victory and the crowd celebrating
-    "celebration":     {"strong": [r"celebrat\w*", r"won", r"win", r"wins", r"winning", r"cheer\w*", r"congratulat\w*"],
+        "celebration": {"strong": [r"celebrat\w*", r"won", r"win", r"wins", r"winning", r"cheer\w*", r"congratulat\w*",
+                                   # after the match: leaving the ring, embracing the opponent (phrases win over 'ring'/'opponent'/'hug' alone)
+                                   r"(?:stepp?\w*|got|gets?|came|comes?|coming|climb\w*|walk\w*)\s+out\s+of\s+the\s+ring",
+                                   r"hug\w*\s+(?:\w+\s+){0,2}opponent", r"opponent\W+(?:\w+\W+){0,6}?hug\w*"],
                         "weak":   [r"crowd"]},
     # the woman (the boy's mother) comes in
     "mother":          {"strong": [r"wom[ae]n", r"mother", r"mom", r"hug\w*"],
