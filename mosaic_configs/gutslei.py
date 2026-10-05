@@ -35,22 +35,25 @@ from nltk.corpus import stopwords
 FILLERS = {
     "um", "uh", "uhm", "umm", "erm", "er", "hmm", "mm", "mhm", "oh", "ah", "eh",
     "yeah", "yes", "okay", "ok", "like", "well", "actually", "basically", "guess",
-    "know", "mean", "kind", "sort",                    
+    "know", "mean", "kind", "sort", "of", "course"              
 }
 HEDGES_AND_VAGUE = {
     "really", "just", "maybe", "probably", "quite", "bit", "little", "lot",
     "thing", "things", "something", "stuff", "also", "even", "much", "way",
     "think", "say", "said", "get", "got", "go", "going", "gonna", "would",
-    "could", "one", "still", "anything", "everything", "sometimes",
+    "could", "one", "still", "anything", "everything", "sometimes", "mostly",
+    "would", "made", "thing",
 }
 INTERVIEW_FRAME = {
     "movie", "film", "scene", "scenes", "moment", "moments", "part", "parts",
     "watching", "watched", "watch", "video", "screen", "time",
     "first", "second", "third", "last", "final", "beginning", "end",
+    "intense", "saw", "see", "won", "dead", "died", "came", 
 }
 # Lists experience verbs that may appear in nearly every topic - enable it if qc_words_content.csv shows they are used by most participants and they crowd out more specific keywords
 OPTIONAL_HIGH_FREQ = {
-    "feel", "felt", "feeling", "feelings",
+    "feel", "felt", "feeling", "feelings", "think", "thought", "understand",
+    "knew",
 }
 USE_OPTIONAL_HIGH_FREQ = False
 
