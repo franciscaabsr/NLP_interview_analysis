@@ -127,7 +127,7 @@ def group_baseline(sim: np.ndarray, labels: pd.Series, name: str) -> dict | None
     different = upper & (lab[:, None] != lab[None, :])
     between = float(sim[different].mean()) if different.any() else np.nan
     return {"baseline": f"same {name}", "groups": len(means), "pairs": int(n_pairs),
-            "mean_similarity": float(np.mean(means)), "sd": float(np.std(meansm ddof=1)) if len(means) > 1 else np.nan, "sd_describes": "per-group means",
+            "mean_similarity": float(np.mean(means)), "sd": float(np.std(means, ddof=1)) if len(means) > 1 else np.nan, "sd_describes": "per-group means",
             "p05": np.nan, "median": float(np.median(means)), "p95": np.nan,
             "between_groups_mean": between}
 
