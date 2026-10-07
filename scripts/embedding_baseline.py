@@ -1,63 +1,35 @@
 #!/usr/bin/env python
 # coding=utf-8
-"""
-# TODO CORRECT AT MY TERMS !!
-embedding_baseline.py -- Save the answer embeddings and compute the baseline
-similarity that MOSAIC's "embedding coherence" must be compared with (GUTSLEI study)
-===========================================================================
 
-Authors : [AUTHOR NAMES]
-Paper   : [PAPER REFERENCE / DOI]
-Version : 1.0
-License : [LICENSE, e.g. MIT]
-Python  : >= 3.10 ; dependencies: numpy, pandas, sentence-transformers
-
-Overview
---------
-MOSAIC's Optuna search scores every model with an "embedding coherence": for
-each topic, the mean cosine similarity between the embeddings of every pair of
-answers in the topic, averaged over the topics. That number has no absolute
-scale: all answers are about the same film, so any two answers are already
-similar. This script computes what the score must be compared with:
-
-  - overall baseline: the mean cosine similarity between ANY two answers of
-    the dataset. Random groups of answers would score this value, so a topic
-    model is only informative to the extent that it scores clearly above it;
-  - group baselines (--by, default participant_id and moment): the score that
-    a "model" would get if its topics were simply the participants, or simply
-    the three moments. Computed exactly like MOSAIC's score (mean of the
-    per-group means). A topic model that does not score above these has not
-    found more structure than who is speaking, or which scene is discussed.
-
-The embeddings are computed exactly as in MOSAIC's optuna_search.py (same
-model, read from the dataset's config; same rows in the same order; default
-encode settings) and saved, so they can be reused, e.g. in the notebook:
-    embeddings = np.load("DATA/derivatives/embeddings/<dataset>_embeddings.npy")
-    topics, probs = topic_model.fit_transform(docs, embeddings)
-MOSAIC's search itself always recomputes its own embeddings (a few seconds).
-
-Usage (from the MOSAIC folder, environment active)
---------------------------------------------------
-    cd $PROJECT/MOSAIC
-    export CUDA_VISIBLE_DEVICES=0
-    python $PROJECT/scripts/embedding_baseline.py --dataset gutslei_answers_full
-
-Saved embeddings are reused when the texts and the model are unchanged;
---recompute forces a new computation. --device cpu avoids the GPU entirely.
-
-Outputs (in --out, default DATA/derivatives/embeddings)
--------------------------------------------------------
-<dataset>_embeddings.npy          float32 array, one row per answer, in the
-                                  order of the dataset's rows (as in MOSAIC)
-<dataset>_embeddings_index.csv    row number -> answer_id, participant_id, moment
-                                  (no interview text)
-<dataset>_embeddings_meta.json    model, number of rows, dimensions, date,
-                                  fingerprint of the texts
-<dataset>_similarity_baseline.csv the baselines, one row each
-<dataset>_similarity_baseline.txt the same, readable, with the interpretation
-
-The embeddings are derived from the interviews: never put them on GitHub.
-"""
+# ==============================================================================
+# title           : embedding_baseline.py
+# description     : Answer-level embeddings and baseline coherence metrics for comparison with Optuna search solutions (parameters for topic modelling)
+#                   - Optuna search scores every model with "embedding coherence" (C_embed), i.e., for each topic, the mean cosine similarity between the 
+#                   embeddings of every pair of answers in the topic, averaged over the topics - but all answers are about the same film, so any two answers 
+#                   are already inherently similar
+#                   - script computes an overall and group baselines to compare with the C_embed, assisting the decision of best parameters for topic modelling:
+#                       1) the mean cosine similarity between ANY two answers of the dataset (random "null" model) - C_embeb must be clearly above it for 
+#                          model to be informative
+#                       2) the score a "model" would get if its topics were simply the participants or the three moments (computed like C_embed) - a topic model
+#                          that does not score above, has most likely not found more structure than who is speaking, or which scene is discussed
+#                          (to be checked with topic content in analyse_topics.py)
+#
+# output          : <dataset>_embeddings.npy          float32 array, one row per answer, in the order of the dataset's rows (as in MOSAIC)
+#                   <dataset>_embeddings_index.csv    row number -> answer_id, participant_id, moment (no interview text)
+#                   <dataset>_embeddings_meta.json    model, number of rows, dimensions, date, fingerprint of the texts
+#                   <dataset>_similarity_baseline.csv the baselines, one row each
+#                   <dataset>_similarity_baseline.txt the same, readable, with the interpretation
+#
+# usage           : cd $PROJECT/MOSAIC
+#                   export CUDA_VISIBLE_DEVICES=0
+#                   python $PROJECT/scripts/embedding_baseline.py --dataset gutslei_answers_full
+#                   adding --device cpu - avoids GPU entirelys
+#
+# dependencies    : Python  : >= 3.10 ; 
+# author          : Ayres Ribeiro, Francisca (f.ayres-ribeiro@nin.knaw.nl) (with support from Claude)
+# date            : 2026-10-07
+# version         : 1.0
+# ==============================================================================
 
 import argparse
 import hashlib
@@ -79,7 +51,7 @@ DEFAULT_MODEL = "Qwen/Qwen3-Embedding-0.6B"  # MOSAIC's default
 TEXT_COLUMNS = ["cleaned_reflection", "reflection_answer", "text", "cleaned_text"]  # MOSAIC's order
 ID_COLUMNS = ["answer_id", "participant_id", "moment", "moment_source", "segment"]  # copied to the index (no text)
 
-
+# Function to load the .csv dataset and returns a table with texts as list
 def load_texts(csv_path: Path, text_col: str | None):
     """Read the dataset as MOSAIC's optuna_search.py does: rows without text are dropped, order kept."""
     df = pd.read_csv(csv_path)
@@ -89,7 +61,7 @@ def load_texts(csv_path: Path, text_col: str | None):
     df = df[df[col].notna()].reset_index(drop=True)
     return df, col, df[col].tolist()
 
-
+# Function to set the embedding model according to MOSAIC config
 def model_from_config(dataset: str) -> str:
     """Embedding model named in the dataset's MOSAIC config (as with --use-config), else MOSAIC's default."""
     try:
@@ -99,7 +71,7 @@ def model_from_config(dataset: str) -> str:
         print(f"  ! Config mosaic.configs.{dataset} not found: using the default model.")
         return DEFAULT_MODEL
 
-
+#Function to check txts and their order, to save embeddings appropriately
 def fingerprint(texts: list[str]) -> str:
     """Short identifier of the exact texts and their order, to know when saved embeddings are still valid."""
     h = hashlib.sha256()
@@ -108,27 +80,28 @@ def fingerprint(texts: list[str]) -> str:
         h.update(b"\x00")
     return h.hexdigest()[:16]
 
-
+# Function to turn the texts into vectors with the embedding model
 def embed(texts: list[str], model_name: str, device: str | None) -> np.ndarray:
     """Same call as MOSAIC: SentenceTransformer(model).encode(texts), default settings."""
     from sentence_transformers import SentenceTransformer
     model = SentenceTransformer(model_name, device=device) if device else SentenceTransformer(model_name)
-    return np.asarray(model.encode(texts, show_progress_bar=True), dtype=np.float32)
+    return np.asarray(model.encode(texts, show_progress_bar=True), dtype=np.float32) # one row per text (answer), one column per dimension (1024 for Qwen model)
 
-
+# Function to compute how similar every pair of texts is
 def cosine_matrix(emb: np.ndarray) -> np.ndarray:
-    """Cosine similarity between every pair of rows."""
+    """Cosine similarity between every pair of rows. It measures the angle between two vectors: 
+    1 means the same direction (very similar meaning in semantic space), 0 unrelated"""
     x = emb.astype(np.float64)
     norms = np.linalg.norm(x, axis=1, keepdims=True)
     x = x / np.where(norms == 0, 1.0, norms)
     return x @ x.T
 
-
+# Function to compute the average similarity between any two answers in the dataset -
 def overall_baseline(sim: np.ndarray) -> dict:
-    """Similarity between any two different answers (upper triangle of the matrix)."""
+    """Similarity between any two different answers (upper triangle of the matrix). This gives a reference point: how similar answers are in general"""
     v = sim[np.triu_indices(len(sim), k=1)]
     return {"baseline": "any two answers", "groups": 1, "pairs": int(v.size),
-            "mean_similarity": float(v.mean()), "sd": float(v.std()),
+            "mean_similarity": float(v.mean()), "sd": float(v.std(ddof=1)), "sd_describes": "pair_similarities",
             "p05": float(np.percentile(v, 5)), "median": float(np.median(v)),
             "p95": float(np.percentile(v, 95)), "between_groups_mean": np.nan}
 
@@ -154,7 +127,7 @@ def group_baseline(sim: np.ndarray, labels: pd.Series, name: str) -> dict | None
     different = upper & (lab[:, None] != lab[None, :])
     between = float(sim[different].mean()) if different.any() else np.nan
     return {"baseline": f"same {name}", "groups": len(means), "pairs": int(n_pairs),
-            "mean_similarity": float(np.mean(means)), "sd": float(np.std(means)),
+            "mean_similarity": float(np.mean(means)), "sd": float(np.std(meansm ddof=1)) if len(means) > 1 else np.nan, "sd_describes": "per-group means",
             "p05": np.nan, "median": float(np.median(means)), "p95": np.nan,
             "between_groups_mean": between}
 
@@ -163,7 +136,7 @@ def report(rows: list[dict], dataset: str, model_name: str, n: int, dim: int) ->
     overall = rows[0]["mean_similarity"]
     lines = [f"Embedding similarity baseline: {dataset}",
              f"{n} answers, model {model_name} ({dim} dimensions), cosine similarity", "",
-             f"Any two answers          mean {overall:.3f}   sd {rows[0]['sd']:.3f}   "
+             f"Any two answers          mean {overall:.3f}   spread (sd) {rows[0]['sd']:.3f}   "
              f"5%-95% {rows[0]['p05']:.3f} to {rows[0]['p95']:.3f}   ({rows[0]['pairs']} pairs)"]
     for r in rows[1:]:
         lines.append(f"{r['baseline'].capitalize():<24} mean {r['mean_similarity']:.3f}   "
@@ -179,6 +152,9 @@ def report(rows: list[dict], dataset: str, model_name: str, n: int, dim: int) ->
                   "    those groups. A model near those values may be separating speakers or scenes",
                   "    rather than kinds of experience: check the topics' spread over participants",
                   "    and moments (analyse_gutslei.py topics)."]
+    lines += ["  - the sd is the spread of the pairwise similarities, not the uncertainty of the mean:",
+              "    pairs share answers and are not independent, so do not build a significance test",
+              "    or a confidence interval on it."]
     return "\n".join(lines) + "\n"
 
 
