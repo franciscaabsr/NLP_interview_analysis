@@ -105,7 +105,7 @@ class GutsleiConfig:
         # NOTE: BERTopic joins all answers of a topic into ONE text before counting, so max_df and min_df count TOPICS
         # (the outlier group included), not answers
         self.max_df = 0.95              # terms used in more than 95% of the topics cannot be keywords (with fewer than 20 topics: terms used in ALL topics)
-        self.min_df = 2                 # terms used in fewer than 2 topics cannot be keywords (a term specific to ONE topic is excluded)
+        self.min_df = 1                 # MOSAIC default = 2; but this allows for topic specific keywords not to be lost
         self.top_n_words = 15           # number of keywords to describe each topic
 
         # --- Optuna search space. Ranges suit the preliminary sample (16 interviews, a few hundred sentences); 
