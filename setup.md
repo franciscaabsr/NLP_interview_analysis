@@ -337,6 +337,7 @@ Steps 5–7 don't depend on step 4, so continue with them while sorting out step
 cd $PROJECT/MOSAIC                              # requirements.txt is here (or use -r $PROJECT/MOSAIC/requirements.txt)
 python -m pip install -r requirements.txt
 python -m pip install optuna langdetect python-dotenv pyyaml   # used by MOSAIC but missing from requirements.txt
+python -m pip install wordfreq                                  # optional: the QC's rare-word check (transcription errors, names)
 python -m pip check                             # ideally "No broken requirements found."
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"   # still …+cu126 True?
 ```
@@ -727,6 +728,8 @@ git add scripts/ mosaic_configs/ SETUP.md README.md && git commit -m "<what chan
 | GPU out of memory | another GPU via `CUDA_VISIBLE_DEVICES`; lower `n_gpu_layers`; close old notebooks |
 | Llama very slow (first run ~30 s) | normal on the first run (one-time GPU translation); if still slow: `n_gpu_layers=-1` and check `nvidia-smi` for other users of the GPU |
 | Optuna results look odd after changes | old trials mixed in: `rm -rf results/optuna/gutslei_answers_full` |
+| `ValueError: Unsupported input type: Series` in `optuna_search.py` (step 11) | without `--sentences` MOSAIC passes a pandas Series, which recent sentence-transformers versions reject. In `src/mosaic/optuna_search.py`, last line of `load_data()` (line 320), change `return texts` to `return list(texts)`; or from `$PROJECT/MOSAIC`: `sed -i '320s/return texts$/return list(texts)/' src/mosaic/optuna_search.py`. Needed again after a fresh clone; `git status` then shows the file as modified, which is expected |
+| `RuntimeError: No CUDA GPUs are available` | `CUDA_VISIBLE_DEVICES` is empty or set to a GPU number that does not exist: `unset CUDA_VISIBLE_DEVICES`, read the number in the first column of `nvidia-smi`, and export that one (our server has one GPU: `0`) |
 | `Could not open requirements file` / `No such file or directory` | run from `$PROJECT/MOSAIC` (steps 5, 11–13) or give the full path |
 | `No module named 'langdetect'` / `'dotenv'` / `'optuna'` | MOSAIC imports packages missing from its requirements: `python -m pip install optuna langdetect python-dotenv pyyaml` (step 5) |
 | warning that `google.generativeai` is deprecated | harmless: part of MOSAIC's optional Gemini preprocessing, which we don't use |
