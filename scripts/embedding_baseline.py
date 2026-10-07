@@ -105,13 +105,15 @@ def overall_baseline(sim: np.ndarray) -> dict:
             "p05": float(np.percentile(v, 5)), "median": float(np.median(v)),
             "p95": float(np.percentile(v, 95)), "between_groups_mean": np.nan}
 
-
+# Function to compute embedding coherence if topics were simply the groups in lables (participant or moment)
 def group_baseline(sim: np.ndarray, labels: pd.Series, name: str) -> dict | None:
     """MOSAIC's embedding coherence if the topics were the groups of `labels`:
     the mean pairwise similarity inside each group, averaged over the groups
     (groups with one answer are skipped, as in MOSAIC). Also the mean
     similarity between answers of different groups."""
-    lab = labels.astype(str).to_numpy()
+    known = labels.notna().to_numpy()  # answers with a label - avoids missing moments!
+    sim = sim[np.ix_(known, known)]
+    lab = labels[known].astype(str).to_numpy()
     means, n_pairs = [], 0
     for g in pd.unique(lab):
         idx = np.flatnonzero(lab == g)
@@ -131,7 +133,7 @@ def group_baseline(sim: np.ndarray, labels: pd.Series, name: str) -> dict | None
             "p05": np.nan, "median": float(np.median(means)), "p95": np.nan,
             "between_groups_mean": between}
 
-
+# Function to turn similarity results into a readable report and explain how to use them in comparison to MOSAIC results
 def report(rows: list[dict], dataset: str, model_name: str, n: int, dim: int) -> str:
     overall = rows[0]["mean_similarity"]
     lines = [f"Embedding similarity baseline: {dataset}",
