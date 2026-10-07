@@ -585,7 +585,12 @@ EXPERIENCE_RE = re.compile(r"\b(?:" + "|".join([
     r"sad\w*", r"happ(?:y|ier|iest|ily|iness)", r"unhapp\w*", r"joy\w*", r"fear\w*", r"afraid", r"scared", r"anxi\w*", r"nervous",
     r"relie[fv]\w*", r"ang(?:er|ry)", r"calm\w*", r"excit\w*", r"empath\w*", r"compassion", r"grief",
     r"griev\w*", r"lonel\w*", r"helpless\w*", r"uncomfortable", r"discomfort", r"disgust\w*", r"shock\w*",
-    r"upset", r"sorrow", r"despair", r"hope\w*", r"love", r"weird", r"strange", r"emptiness", r"empty",
+        r"upset", r"sorrow", r"despair", r"hope\w*", r"love", r"weird", r"strange", r"emptiness", r"empty",
+    # states, stances and expressions found missing when reviewing the short answers dropped by analyse_gutslei.py content
+    r"surpris\w*", r"disbelie\w*", r"blindsided", r"confus\w*", r"neutral", r"stress\w*", r"relax\w*",
+    r"curious", r"curiosity", r"enjoy\w*", r"smil\w*", r"torso", r"bystander\w*", r"ignor\w*",
+    r"immers\w*", r"absorb\w*", r"(?:stay\w*|keep\w*|kept|sit\w*|sat) still",
+    r"(?:i|we|you) (?:was|were|am|are|felt|feel|got) (?:\w+ ){0,2}(?:in|into|inside) the (?:movie|film|story)",
 ]) + r")\b", re.I)
 # Evaluations always express the SPEAKER's appraisal, even about a character
 # ("the father was cruel", "it was a good fight"), unlike emotion words, which
